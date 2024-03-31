@@ -6,20 +6,23 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/webbben/p2p-file-share/internal/network"
 )
 
 const (
-	localSubnet = "192.168.1"
-	startIP     = 1
-	endIP       = 255
-	timeout     = 500 * time.Millisecond
-	port        = "8080"
+	startIP = 1
+	endIP   = 255
+	timeout = 500 * time.Millisecond
+	port    = "8080"
 )
 
 var discoveredPeers []string
 var mutex sync.Mutex
 
 func DiscoverPeers() []string {
+	localSubnet := network.GetLocalSubnetBase()
+	fmt.Println("searching for peers on local subnet:", localSubnet)
 	var wg sync.WaitGroup
 	discoveredPeers = []string{}
 	for i := startIP; i <= endIP; i++ {
