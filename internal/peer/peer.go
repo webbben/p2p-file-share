@@ -22,11 +22,15 @@ var mutex sync.Mutex
 
 func DiscoverPeers() []string {
 	localSubnet := network.GetLocalSubnetBase()
+	myIP := network.GetLocalIP()
 	fmt.Println("searching for peers on local subnet:", localSubnet)
 	var wg sync.WaitGroup
 	discoveredPeers = []string{}
 	for i := startIP; i <= endIP; i++ {
 		ip := fmt.Sprintf("%v.%v", localSubnet, i)
+		if ip == myIP {
+			continue
+		}
 		wg.Add(1)
 		go func() {
 			scanIP(ip)

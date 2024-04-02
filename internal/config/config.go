@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/webbben/p2p-file-share/internal/ui"
 )
 
 type Config struct {
@@ -14,9 +16,6 @@ type Config struct {
 
 // creates a config file if one doesn't exist yet
 func InitializeConfigFile(config Config) {
-	if configExists() {
-		return
-	}
 	// create the config file
 	configJson, err := json.Marshal(config)
 	if err != nil {
@@ -40,10 +39,6 @@ func InitializeConfigFile(config Config) {
 }
 
 func LoadConfig() *Config {
-	if !configExists() {
-		fmt.Println("failed to load config; config file doesn't exist")
-		return nil
-	}
 	jsonData, err := os.ReadFile(configFilePath())
 	if err != nil {
 		fmt.Println("failed to read config json file:", err)
@@ -59,10 +54,6 @@ func LoadConfig() *Config {
 }
 
 func SaveConfig(config Config) {
-	if !configExists() {
-		InitializeConfigFile(config)
-		return
-	}
 	file, err := os.Open(configFilePath())
 	if err != nil {
 		fmt.Println("failed to open config json:", err)
@@ -81,13 +72,46 @@ func SaveConfig(config Config) {
 	}
 }
 
-func configExists() bool {
-	if _, err := os.Stat(configFilePath()); err == nil {
-		return true
-	}
-	return false
-}
-
 func configFilePath() string {
 	return filepath.Join("internal", "config", "config.json")
+}
+
+// walks the user through creating a new config, and returns it
+func NewConfigWorkflow() *Config {
+	temp, _ := os.Hostname()
+	config := Config{
+		Nickname: temp,
+	}
+	// nickname
+	fmt.Printf("Current node nickname: %s", config.Nickname)
+	if ui.YorN("Enter a new nickname for this node?") {
+		fmt.Print("Nickname: ")
+		nickname := ui.ReadInput()
+		if nickname == "" {
+			fmt.Println("No nickname entered.")
+		} else {
+			if ui.YorN(fmt.Sprintf("Use nickname \"%s\"?", nickname)) {
+				config.Nickname = nickname
+			} else {
+				fmt.Println("No nickname entered.")
+			}
+		}
+	}
+	// fileshare directory
+	fmt.Println("Enter a directory path to use for file sharing (Note: it should be empty):")
+	directory := ""
+	for directory == "" {
+		directory = ui.ReadInput()
+		if directory == "" {
+			fmt.Println("You must enter a valid directory.")
+		} else {
+			if ui.YorN(fmt.Sprintf("Path: %s.\nAre you sure you want to use this directory?", directory)) {
+				config.SharedDirectoryPath = directory
+			} else {
+				fmt.Println("Gotcha, please enter a different directory then.")
+				directory = ""
+			}
+		}
+	}
+	return &config
 }
