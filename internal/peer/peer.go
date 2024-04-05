@@ -2,11 +2,14 @@ package peer
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/webbben/p2p-file-share/internal/config"
+	"github.com/webbben/p2p-file-share/internal/model"
 	"github.com/webbben/p2p-file-share/internal/network"
 )
 
@@ -61,14 +64,20 @@ func scanIP(ip string) {
 
 // exchange a crisp handshake with the IP to confirm that they are, in fact, your homie (peer)
 func crispHandshake(conn net.Conn) bool {
+	// send a handshake that just includes this nodes IP address
 	localAddr := conn.LocalAddr().String()
-	fmt.Fprintf(conn, "%s\n", localAddr)
-
-	// set a timeout
-	timeoutDur := 5 * time.Second
-	handshakeTimeout := time.After(timeoutDur)
+	handshakeJson, err := json.Marshal(model.Handshake{
+		Type: config.TYPE_DISCOVER_PEER,
+		Data: localAddr,
+	})
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+	conn.Write(handshakeJson)
 
 	// wait for a response, or the timeout
+	handshakeTimeout := time.After(5 * time.Second)
 	select {
 	case <-handshakeTimeout:
 		fmt.Println("handshake timed out: peer didn't respond")
@@ -77,8 +86,14 @@ func crispHandshake(conn net.Conn) bool {
 		// receive peer info
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
-			peerAddr := scanner.Text()
-			fmt.Printf("Peer info: %s\n", peerAddr)
+			respBytes := scanner.Bytes()
+			var respJson model.Handshake
+			err = json.Unmarshal(respBytes, &respJson)
+			if err != nil {
+				fmt.Println(err)
+				return false
+			}
+			fmt.Printf("Peer info: %s\n", respJson.Data)
 			return true
 		}
 	}
