@@ -103,11 +103,11 @@ func ListenForHandshakes() {
 			fmt.Println("Failed to accept connection:", err)
 			continue
 		}
-		go respondToHandshake(conn)
+		go RespondToHandshake(conn)
 	}
 }
 
-func respondToHandshake(conn net.Conn) {
+func RespondToHandshake(conn net.Conn) {
 	defer conn.Close()
 
 	// read peer info

@@ -8,13 +8,13 @@ import (
 	c "github.com/webbben/p2p-file-share/internal/config"
 	"github.com/webbben/p2p-file-share/internal/network"
 	"github.com/webbben/p2p-file-share/internal/peer"
+	"github.com/webbben/p2p-file-share/internal/server"
 	"github.com/webbben/p2p-file-share/internal/ui"
 )
 
 func main() {
-	// run this in the background indefinitely, so this node is always discoverable
-	go peer.ListenForHandshakes()
-	time.Sleep(1 * time.Second)
+	// start the message server to handle incoming connections from peers
+	go server.MessageServer()
 
 	ip := network.GetLocalIP()
 	if ip != "" {
