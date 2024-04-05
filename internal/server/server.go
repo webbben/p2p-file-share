@@ -19,7 +19,7 @@ func MessageServer() {
 		fmt.Println("Error starting message server:", err)
 		return
 	}
-	server.Close()
+	defer server.Close()
 
 	log.Printf("TCP server listening on port %v\n", port)
 
