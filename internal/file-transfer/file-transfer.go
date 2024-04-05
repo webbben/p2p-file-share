@@ -89,17 +89,20 @@ func receiveFile(conn net.Conn, filePath string) error {
 	// read an initial buffer to check for error messages
 	buf, err := network.ReadBuffer(conn, 1024)
 	if err != nil {
+		os.Remove(fullPath)
 		return err
 	}
-	_, err = file.Write(buf)
+	b1, err := file.Write(buf)
 	if err != nil {
+		os.Remove(fullPath)
 		return err
 	}
 	// Read any remaining data in the stream
-	_, err = io.Copy(file, conn)
+	b2, err := io.Copy(file, conn)
 	if err != nil {
+		os.Remove(fullPath)
 		return err
 	}
-	fmt.Printf("wrote file to %s\n", fullPath)
+	fmt.Printf("wrote %v bytes to %s\n", int64(b1)+b2, fullPath)
 	return nil
 }
