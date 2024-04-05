@@ -1,6 +1,7 @@
 package network
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -34,4 +35,19 @@ func GetLocalSubnetBase() string {
 		return "" // no periods found? so probably invalid IP found
 	}
 	return localIP[:lastIndex]
+}
+
+// reads a buffer from a connection, detecting protocol-specified error messages at the same time
+func ReadBuffer(conn net.Conn, bufferSize int) ([]byte, error) {
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return []byte{}, errors.Join(errors.New("failed to read buffer"), err)
+	}
+	response := string(buf[:n])
+	if strings.HasPrefix(response, "ERROR:") {
+		errorMsg := strings.TrimPrefix(response, "ERROR:")
+		return []byte{}, errors.New(errorMsg)
+	}
+	return buf[:n], nil
 }
