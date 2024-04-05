@@ -129,19 +129,24 @@ func RespondToHandshake(conn net.Conn) {
 	defer conn.Close()
 	fmt.Println("responding to handshake")
 
-	// read peer info from handshake
-	buf, err := network.ReadBuffer(conn, 1024)
-	if err != nil {
-		fmt.Println("error reading handshake buffer")
-		return
-	}
-	var handshakeJson model.Handshake
-	err = json.Unmarshal(buf, &handshakeJson)
-	if err != nil {
-		fmt.Println("error parsing handshake:", err)
-		return
-	}
-	fmt.Println("Peer info:", handshakeJson.Data)
+	/*
+		TODO: for some reason the handshake data doesnt get read and sits waiting
+
+			// read peer info from handshake
+			buf, err := network.ReadBuffer(conn, 1024)
+			if err != nil {
+				fmt.Println("error reading handshake buffer")
+				return
+			}
+			fmt.Println("handshake buffer read")
+			var handshakeJson model.Handshake
+			err = json.Unmarshal(buf, &handshakeJson)
+			if err != nil {
+				fmt.Println("error parsing handshake:", err)
+				return
+			}
+			fmt.Println("Peer info:", handshakeJson.Data)
+	*/
 
 	// send back handshake response
 	bytes, err := json.Marshal(model.Handshake{Type: config.TYPE_DISCOVER_PEER, Data: conn.RemoteAddr().String()})
