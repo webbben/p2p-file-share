@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 
 	"github.com/webbben/p2p-file-share/internal/config"
 	"github.com/webbben/p2p-file-share/internal/model"
@@ -19,8 +20,9 @@ const (
 func SendFile(conn net.Conn, filePath string) (bool, error) {
 	defer conn.Close()
 
+	mountDir := config.GetMountDir(nil) // TODO pass config in instead of loading it
 	// open the file
-	file, err := os.Open(filePath)
+	file, err := os.Open(filepath.Join(mountDir, filePath))
 	if err != nil {
 		fmt.Println("Error sending file:", err)
 		return false, err
@@ -74,7 +76,8 @@ func RequestFile(senderIP string, filePath string) (bool, error) {
 
 func receiveFile(conn net.Conn, filePath string) error {
 	// Create or open the file for writing
-	file, err := os.Create(filePath)
+	mountDir := config.GetMountDir(nil) // TODO pass in the config instead of loading it each time
+	file, err := os.Create(filepath.Join(mountDir, filePath))
 	if err != nil {
 		return err
 	}

@@ -53,6 +53,14 @@ func LoadConfig() *Config {
 	return &config
 }
 
+func GetMountDir(config *Config) string {
+	if config != nil {
+		return config.SharedDirectoryPath
+	}
+	conf := LoadConfig()
+	return conf.SharedDirectoryPath
+}
+
 func SaveConfig(config Config) {
 	file, err := os.Open(configFilePath())
 	if err != nil {
