@@ -85,8 +85,11 @@ func crispHandshake(conn net.Conn) bool {
 	default:
 		// receive peer info
 		scanner := bufio.NewScanner(conn)
+		fmt.Println("waiting for response...")
 		for scanner.Scan() {
+			fmt.Println("ope")
 			respBytes := scanner.Bytes()
+			fmt.Println("got the bytes")
 			var respJson model.Handshake
 			err = json.Unmarshal(respBytes, &respJson)
 			if err != nil {
@@ -124,13 +127,27 @@ func ListenForHandshakes() {
 
 func RespondToHandshake(conn net.Conn) {
 	defer conn.Close()
+	fmt.Println("responding to handshake")
 
-	// read peer info
-	scanner := bufio.NewScanner(conn)
-	scanner.Scan()
-	peerAddr := scanner.Text()
-	fmt.Println("Peer info:", peerAddr)
+	// read peer info from handshake
+	buf, err := network.ReadBuffer(conn, 1024)
+	if err != nil {
+		fmt.Println("error reading handshake buffer")
+		return
+	}
+	var handshakeJson model.Handshake
+	err = json.Unmarshal(buf, &handshakeJson)
+	if err != nil {
+		fmt.Println("error parsing handshake:", err)
+		return
+	}
+	fmt.Println("Peer info:", handshakeJson.Data)
 
-	// echo
-	fmt.Fprintf(conn, "%s\n", conn.RemoteAddr())
+	// send back handshake response
+	bytes, err := json.Marshal(model.Handshake{Type: config.TYPE_DISCOVER_PEER, Data: conn.RemoteAddr().String()})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	conn.Write(bytes)
 }
