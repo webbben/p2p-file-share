@@ -31,6 +31,7 @@ func WatchForFileChanges(dir string) {
 			if !ok {
 				return
 			}
+			// ignore .swp files, which linux generates while editing some files
 			if strings.HasSuffix(event.Name, ".swp") {
 				continue
 			}

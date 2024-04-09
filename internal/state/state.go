@@ -60,3 +60,8 @@ func GetPeers() []m.Peer {
 func GetHistoricalPeers() map[string]time.Time {
 	return state.HistoricPeersList
 }
+
+// determines if the peer data is stale and should be refreshed
+func PeerDataIsStale() bool {
+	return time.Since(state.LastPeerSearch) > (time.Minute * 5)
+}

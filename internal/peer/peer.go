@@ -17,8 +17,6 @@ import (
 const (
 	startIP = 1
 	endIP   = 255
-	timeout = 500 * time.Millisecond
-	port    = "8080"
 )
 
 var discoveredPeers []m.Peer
@@ -48,8 +46,8 @@ func DiscoverPeers() []m.Peer {
 }
 
 func scanIP(ip string) {
-	addr := net.JoinHostPort(ip, port)
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	addr := net.JoinHostPort(ip, fmt.Sprintf("%v", c.PORT))
+	conn, err := net.DialTimeout("tcp", addr, time.Millisecond*time.Duration(c.MESSAGE_TIMEOUT_MS))
 	if err != nil {
 		return // connection failed
 	}
@@ -78,7 +76,7 @@ func crispHandshake(conn net.Conn, ip string) (bool, m.Peer) {
 	conn.Write(handshakeJson)
 
 	// wait for a response, or timeout
-	conn.SetDeadline(time.Now().Add(time.Second * 5))
+	conn.SetDeadline(time.Now().Add(time.Millisecond * time.Duration(c.MESSAGE_TIMEOUT_MS)))
 	buf, err := network.ReadBuffer(conn, 1024)
 	if err != nil {
 		fmt.Println("error reading handshake response:", err)
