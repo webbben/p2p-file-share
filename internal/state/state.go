@@ -16,7 +16,10 @@ type State struct {
 }
 
 var (
-	state      *State = &State{}
+	state *State = &State{
+		HistoricPeersList: map[string]time.Time{},
+		CurrentPeersList:  []m.Peer{},
+	}
 	stateMutex sync.Mutex
 )
 
