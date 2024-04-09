@@ -14,3 +14,8 @@ type FileRequest struct {
 	Type string `json:"type"`
 	File string `json:"file"`
 }
+
+type Peer struct {
+	IP       string `json:"ip"`
+	Nickname string `json:"nickname"`
+}

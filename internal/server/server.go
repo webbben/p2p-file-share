@@ -65,3 +65,7 @@ func handleConnection(conn net.Conn) {
 		filetransfer.SendFile(conn, filePath)
 	}
 }
+
+func BroadcastMessage(msg map[string]interface{}) {
+
+}

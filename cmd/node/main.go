@@ -9,13 +9,12 @@ import (
 	"github.com/webbben/p2p-file-share/internal/network"
 	"github.com/webbben/p2p-file-share/internal/peer"
 	"github.com/webbben/p2p-file-share/internal/server"
+	"github.com/webbben/p2p-file-share/internal/state"
+	"github.com/webbben/p2p-file-share/internal/syncdir"
 	"github.com/webbben/p2p-file-share/internal/ui"
 )
 
 func main() {
-	// start the message server to handle incoming connections from peers
-	go server.MessageServer()
-
 	ip := network.GetLocalIP()
 	if ip != "" {
 		fmt.Println("Node IP:", ip)
@@ -36,15 +35,18 @@ func main() {
 	fmt.Println("Node nickname:", config.Nickname)
 	fmt.Println("Fileshare directory:", config.SharedDirectoryPath)
 
-	// search for peers every minute
-	for {
-		peers := peer.DiscoverPeers()
-		fmt.Println("Peers discovered:")
-		for _, ip := range peers {
-			fmt.Println(ip)
-		}
-		fmt.Println("(sleeping for 1 minute)")
-		time.Sleep(1 * time.Minute)
+	// get an initial set of peers
+	peers := peer.DiscoverPeers()
+	state.SetPeers(peers)
 
+	// start the message server to handle incoming connections from peers
+	go server.MessageServer()
+	// watch for changes to the shared file directory
+	go syncdir.WatchForFileChanges(config.SharedDirectoryPath)
+
+	for {
+		time.Sleep(1 * time.Minute)
+		peers = peer.DiscoverPeers()
+		state.SetPeers(peers)
 	}
 }

@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/webbben/p2p-file-share/internal/config"
-	"github.com/webbben/p2p-file-share/internal/model"
+	m "github.com/webbben/p2p-file-share/internal/model"
 	"github.com/webbben/p2p-file-share/internal/network"
+	"github.com/webbben/p2p-file-share/internal/state"
 )
 
 const (
@@ -20,15 +22,15 @@ const (
 	port    = "8080"
 )
 
-var discoveredPeers []string
+var discoveredPeers []m.Peer
 var mutex sync.Mutex
 
-func DiscoverPeers() []string {
+func DiscoverPeers() []m.Peer {
 	localSubnet := network.GetLocalSubnetBase()
 	myIP := network.GetLocalIP()
 	fmt.Println("searching for peers on local subnet:", localSubnet)
 	var wg sync.WaitGroup
-	discoveredPeers = []string{}
+	discoveredPeers = []m.Peer{}
 	for i := startIP; i <= endIP; i++ {
 		ip := fmt.Sprintf("%v.%v", localSubnet, i)
 		if ip == myIP {
@@ -42,6 +44,7 @@ func DiscoverPeers() []string {
 	}
 
 	wg.Wait()
+	fmt.Println("Number of peers found:", len(discoveredPeers))
 	return discoveredPeers
 }
 
@@ -57,7 +60,7 @@ func scanIP(ip string) {
 	fmt.Printf("Peer candidate: %s\n", ip)
 	if crispHandshake(conn) {
 		mutex.Lock()
-		discoveredPeers = append(discoveredPeers, ip)
+		discoveredPeers = append(discoveredPeers, m.Peer{IP: ip})
 		mutex.Unlock()
 	}
 }
@@ -66,7 +69,7 @@ func scanIP(ip string) {
 func crispHandshake(conn net.Conn) bool {
 	// send a handshake that just includes this nodes IP address
 	localAddr := conn.LocalAddr().String()
-	handshakeJson, err := json.Marshal(model.Handshake{
+	handshakeJson, err := json.Marshal(m.Handshake{
 		Type: config.TYPE_DISCOVER_PEER,
 		Data: localAddr,
 	})
@@ -90,7 +93,7 @@ func crispHandshake(conn net.Conn) bool {
 			fmt.Println("ope")
 			respBytes := scanner.Bytes()
 			fmt.Println("got the bytes")
-			var respJson model.Handshake
+			var respJson m.Handshake
 			err = json.Unmarshal(respBytes, &respJson)
 			if err != nil {
 				fmt.Println(err)
@@ -148,11 +151,16 @@ func RespondToHandshake(conn net.Conn) {
 			fmt.Println("Peer info:", handshakeJson.Data)
 	*/
 
-	// send back handshake response
-	bytes, err := json.Marshal(model.Handshake{Type: config.TYPE_DISCOVER_PEER, Data: conn.RemoteAddr().String()})
+	// send back handshake response by echoing their IP address back
+	remoteAddr := conn.RemoteAddr().String()
+	remoteIP := strings.Split(remoteAddr, ":")[0] // remove the port number from the address
+	bytes, err := json.Marshal(m.Handshake{Type: config.TYPE_DISCOVER_PEER, Data: remoteIP})
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	conn.Write(bytes)
+
+	// add this IP to this nodes peer list
+	state.AddPeer(m.Peer{IP: remoteIP})
 }
