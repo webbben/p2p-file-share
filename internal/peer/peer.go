@@ -1,7 +1,6 @@
 package peer
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -9,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/webbben/p2p-file-share/internal/config"
+	c "github.com/webbben/p2p-file-share/internal/config"
 	m "github.com/webbben/p2p-file-share/internal/model"
 	"github.com/webbben/p2p-file-share/internal/network"
 	"github.com/webbben/p2p-file-share/internal/state"
@@ -57,104 +56,60 @@ func scanIP(ip string) {
 	defer conn.Close()
 
 	// peer discovered
-	fmt.Printf("Peer candidate: %s\n", ip)
-	if crispHandshake(conn) {
+	if success, p := crispHandshake(conn, ip); success {
 		mutex.Lock()
-		discoveredPeers = append(discoveredPeers, m.Peer{IP: ip})
+		discoveredPeers = append(discoveredPeers, p)
 		mutex.Unlock()
 	}
 }
 
 // exchange a crisp handshake with the IP to confirm that they are, in fact, your homie (peer)
-func crispHandshake(conn net.Conn) bool {
+func crispHandshake(conn net.Conn, ip string) (bool, m.Peer) {
 	// send a handshake that just includes this nodes IP address
 	localAddr := conn.LocalAddr().String()
 	handshakeJson, err := json.Marshal(m.Handshake{
-		Type: config.TYPE_DISCOVER_PEER,
+		Type: c.TYPE_DISCOVER_PEER,
 		Data: localAddr,
 	})
 	if err != nil {
 		fmt.Println(err)
-		return false
+		return false, m.Peer{}
 	}
 	conn.Write(handshakeJson)
 
-	// wait for a response, or the timeout
-	handshakeTimeout := time.After(5 * time.Second)
-	select {
-	case <-handshakeTimeout:
-		fmt.Println("handshake timed out: peer didn't respond")
-		return false
-	default:
-		// receive peer info
-		scanner := bufio.NewScanner(conn)
-		fmt.Println("waiting for response...")
-		for scanner.Scan() {
-			fmt.Println("ope")
-			respBytes := scanner.Bytes()
-			fmt.Println("got the bytes")
-			var respJson m.Handshake
-			err = json.Unmarshal(respBytes, &respJson)
-			if err != nil {
-				fmt.Println(err)
-				return false
-			}
-			fmt.Printf("Peer info: %s\n", respJson.Data)
-			return true
-		}
-	}
-	return false
-}
-
-// listen for other peers who are looking to discover this node, and shake its hand
-func ListenForHandshakes() {
-	ln, err := net.Listen("tcp", ":"+port)
+	// wait for a response, or timeout
+	conn.SetDeadline(time.Now().Add(time.Second * 5))
+	buf, err := network.ReadBuffer(conn, 1024)
 	if err != nil {
-		fmt.Println("Failed to start listener:", err)
-		return
+		fmt.Println("error reading handshake response:", err)
+		return false, m.Peer{}
 	}
-	defer ln.Close()
-
-	fmt.Printf("Listening for peer connections on port %s...\n", port)
-
-	// dap up any homies (peers) that send handshakes
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			fmt.Println("Failed to accept connection:", err)
-			continue
-		}
-		go RespondToHandshake(conn)
+	var respJson m.Handshake
+	err = json.Unmarshal(buf, &respJson)
+	if err != nil {
+		fmt.Println(err)
+		return false, m.Peer{}
+	}
+	fmt.Printf("Peer response: %s\n", respJson.Data)
+	// TODO: validate data in some way, to further authenticate peer node?
+	return true, m.Peer{
+		IP:       ip,
+		Nickname: respJson.Nickname,
 	}
 }
 
-func RespondToHandshake(conn net.Conn) {
+func RespondToHandshake(conn net.Conn, handshakeData m.Handshake, config c.Config) {
 	defer conn.Close()
 	fmt.Println("responding to handshake")
 
-	/*
-		TODO: for some reason the handshake data doesnt get read and sits waiting
-
-			// read peer info from handshake
-			buf, err := network.ReadBuffer(conn, 1024)
-			if err != nil {
-				fmt.Println("error reading handshake buffer")
-				return
-			}
-			fmt.Println("handshake buffer read")
-			var handshakeJson model.Handshake
-			err = json.Unmarshal(buf, &handshakeJson)
-			if err != nil {
-				fmt.Println("error parsing handshake:", err)
-				return
-			}
-			fmt.Println("Peer info:", handshakeJson.Data)
-	*/
-
-	// send back handshake response by echoing their IP address back
+	// send back handshake response
 	remoteAddr := conn.RemoteAddr().String()
 	remoteIP := strings.Split(remoteAddr, ":")[0] // remove the port number from the address
-	bytes, err := json.Marshal(m.Handshake{Type: config.TYPE_DISCOVER_PEER, Data: remoteIP})
+	bytes, err := json.Marshal(m.Handshake{
+		Type:     c.TYPE_DISCOVER_PEER,
+		Data:     remoteIP,        // echo their IP back, to confirm we are a legit node
+		Nickname: config.Nickname, // send nickname of this node
+	})
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -162,5 +117,8 @@ func RespondToHandshake(conn net.Conn) {
 	conn.Write(bytes)
 
 	// add this IP to this nodes peer list
-	state.AddPeer(m.Peer{IP: remoteIP})
+	state.AddPeer(m.Peer{
+		IP:       remoteIP,
+		Nickname: handshakeData.Nickname,
+	})
 }

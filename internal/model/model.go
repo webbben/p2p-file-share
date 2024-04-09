@@ -5,8 +5,9 @@ All Request types should include a "type" property so the TCP servers can detect
 */
 
 type Handshake struct {
-	Type string `json:"type"`
-	Data string `json:"data"`
+	Type     string `json:"type"`
+	Data     string `json:"data"`
+	Nickname string `json:"nickname"`
 }
 
 // a request for a file to be sent from one node to another

@@ -2,6 +2,7 @@ package syncdir
 
 import (
 	"log"
+	"strings"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -30,16 +31,19 @@ func WatchForFileChanges(dir string) {
 			if !ok {
 				return
 			}
+			if strings.HasSuffix(event.Name, ".swp") {
+				continue
+			}
 			if event.Op&fsnotify.Write == fsnotify.Write {
-				log.Println("Modified file:", event.Name, event.Op)
+				log.Printf("Modified %s (%s)\n", event.Name, event.Op)
 				// Handle file modification
 			}
 			if event.Op&fsnotify.Create == fsnotify.Create {
-				log.Println("Created file:", event.Name, event.Op)
+				log.Printf("Created %s (%s)\n", event.Name, event.Op)
 				// Handle file creation
 			}
 			if event.Op&fsnotify.Remove == fsnotify.Remove {
-				log.Println("Removed file:", event.Name)
+				log.Printf("Removed %s (%s)\n", event.Name, event.Op)
 				// Handle file removal
 			}
 		}

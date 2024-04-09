@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 )
 
 // finds the IP address for this machine
@@ -40,6 +41,10 @@ func GetLocalSubnetBase() string {
 // reads a buffer from a connection, detecting protocol-specified error messages at the same time
 func ReadBuffer(conn net.Conn, bufferSize int) ([]byte, error) {
 	buf := make([]byte, 1024)
+	err := conn.SetDeadline(time.Now().Add(time.Second * 5))
+	if err != nil {
+		return []byte{}, err
+	}
 	n, err := conn.Read(buf)
 	if err != nil {
 		return []byte{}, errors.Join(errors.New("failed to read buffer"), err)

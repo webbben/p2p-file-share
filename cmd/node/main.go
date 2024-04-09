@@ -40,7 +40,7 @@ func main() {
 	state.SetPeers(peers)
 
 	// start the message server to handle incoming connections from peers
-	go server.MessageServer()
+	go server.MessageServer(*config)
 	// watch for changes to the shared file directory
 	go syncdir.WatchForFileChanges(config.SharedDirectoryPath)
 

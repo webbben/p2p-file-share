@@ -6,14 +6,15 @@ import (
 	"log"
 	"net"
 
-	"github.com/webbben/p2p-file-share/internal/config"
+	c "github.com/webbben/p2p-file-share/internal/config"
 	filetransfer "github.com/webbben/p2p-file-share/internal/file-transfer"
+	m "github.com/webbben/p2p-file-share/internal/model"
 	"github.com/webbben/p2p-file-share/internal/peer"
 )
 
 // starts a server for TCP-based messages, and routes incoming messages to their correct functionality.
-func MessageServer() {
-	port := config.PORT
+func MessageServer(config c.Config) {
+	port := c.PORT
 	server, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
 	if err != nil {
 		fmt.Println("Error starting message server:", err)
@@ -30,12 +31,12 @@ func MessageServer() {
 			log.Println("Error accepting connection:", err)
 			continue
 		}
-		handleConnection(conn)
+		handleConnection(conn, config)
 	}
 }
 
 // route the incoming connection based on its type and purpose
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, config c.Config) {
 	defer conn.Close()
 
 	// read incoming data
@@ -58,14 +59,32 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 	switch messageType {
-	case config.TYPE_DISCOVER_PEER:
-		peer.RespondToHandshake(conn)
-	case config.TYPE_FILE_REQUEST:
-		filePath := msg["file"].(string)
-		filetransfer.SendFile(conn, filePath)
+	case c.TYPE_DISCOVER_PEER:
+		var structMsg m.Handshake
+		if err := mapToStruct(msg, &structMsg); err != nil {
+			fmt.Println("error decoding handshake data:", err)
+			return
+		}
+		peer.RespondToHandshake(conn, structMsg, config)
+	case c.TYPE_FILE_REQUEST:
+		var structMsg m.FileRequest
+		if err := mapToStruct(msg, &structMsg); err != nil {
+			fmt.Println("error decoding file request data:", err)
+			return
+		}
+		filetransfer.SendFile(conn, structMsg.File)
 	}
 }
 
 func BroadcastMessage(msg map[string]interface{}) {
 
+}
+
+// converts the raw json data we read from the TCP connection to the actual data type we want
+func mapToStruct(rawData map[string]interface{}, outStruct interface{}) error {
+	jsonData, err := json.Marshal(rawData)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(jsonData, outStruct)
 }
