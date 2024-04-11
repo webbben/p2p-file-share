@@ -56,6 +56,7 @@ func WatchForFileChanges(dir string) {
 			if strings.HasSuffix(event.Name, ".swp") {
 				continue
 			}
+			fmt.Println("raw filename:", event.Name, "base dir:", dir)
 			filename := strings.Split(event.Name, dir)[1]
 			if event.Op&fsnotify.Write == fsnotify.Write {
 				log.Printf("Modified %s (%s)\n", event.Name, event.Op)
@@ -76,6 +77,11 @@ func WatchForFileChanges(dir string) {
 
 // queues up a file change and triggers the file changes broadcast after a short delay
 func queueFileChange(file string, changeType string) {
+	file = strings.TrimSpace(file)
+	if file == "" {
+		fmt.Println("failed to queue change: empty file name!")
+		return
+	}
 	// ship the file changes after a short delay, to make sure any simultaneous file changes are all accounted for together
 	// sometimes when a file is changed, fsnotify notices more than one file change (a WRITE and CHMOD, for example), and we don't want to send out duplicate file change notifications in such cases.
 	if !changeFlag {
@@ -116,6 +122,14 @@ func shipFileChanges() {
 
 // handle a file change notification sent to this node from a peer
 func HandleRemoteFileChange(fileChange m.NotifyFileChange, remoteIP string) {
+	if fileChange.File == "" {
+		fmt.Println("error handling remote file change: no file name provided")
+		return
+	}
+	if fileChange.Change == "" {
+		fmt.Println("error handling remote file change: no file change type provided (needs mod, del, etc)")
+		return
+	}
 	switch fileChange.Change {
 	case FILE_MOD:
 		_, err := filetransfer.RequestFile(remoteIP, fileChange.File)

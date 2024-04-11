@@ -3,6 +3,7 @@ package filetransfer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -47,7 +48,6 @@ func RequestFile(senderIP string, filePath string) (bool, error) {
 	// connect to the sender node
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%v", senderIP, port))
 	if err != nil {
-		fmt.Println("Error receiving file:", err)
 		return false, err
 	}
 	defer conn.Close()
@@ -70,7 +70,6 @@ func RequestFile(senderIP string, filePath string) (bool, error) {
 	// TODO: receive the file over the existing connection
 	err = receiveFile(conn, filePath)
 	if err != nil {
-		fmt.Println("error receiving file:", err)
 		return false, err
 	}
 	fmt.Println("received file:", filePath)
@@ -78,6 +77,9 @@ func RequestFile(senderIP string, filePath string) (bool, error) {
 }
 
 func receiveFile(conn net.Conn, filePath string) error {
+	if filePath == "" {
+		return errors.New("no filepath provided to receiveFile")
+	}
 	// Create or open the file for writing
 	mountDir := config.GetMountDir(nil) // TODO pass in the config instead of loading it each time
 	fullPath := filepath.Join(mountDir, filePath)

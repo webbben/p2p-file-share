@@ -82,6 +82,7 @@ func handleConnection(conn net.Conn, config c.Config) {
 			fmt.Println("error decoding file change data:", err)
 			return
 		}
+		fmt.Println("file change!", structMsg)
 		syncdir.HandleRemoteFileChange(structMsg, remoteIP)
 	}
 }

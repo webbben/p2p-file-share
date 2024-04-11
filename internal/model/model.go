@@ -1,5 +1,7 @@
 package model
 
+import "fmt"
+
 /*
 All messages should include a "type" property so the TCP servers can detect the purpose of the message
 */
@@ -20,6 +22,10 @@ type NotifyFileChange struct {
 	Type   string `json:"type"`
 	File   string `json:"file"`   // the path of the file (relative to the mount directory)
 	Change string `json:"change"` // the type of change that occurred, e.g. modified, deleted, etc.
+}
+
+func (n NotifyFileChange) String() string {
+	return fmt.Sprintf("%s (%s)", n.File, n.Change)
 }
 
 type Peer struct {
