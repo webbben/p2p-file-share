@@ -3,6 +3,7 @@ package syncdir
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -57,7 +58,7 @@ func WatchForFileChanges(dir string) {
 				continue
 			}
 			fmt.Println("raw filename:", event.Name, "base dir:", dir)
-			filename := strings.Split(event.Name, dir)[1]
+			filename := removePathPrefix(event.Name, dir)
 			if event.Op&fsnotify.Write == fsnotify.Write {
 				log.Printf("Modified %s (%s)\n", event.Name, event.Op)
 				// Handle file modification
@@ -73,6 +74,16 @@ func WatchForFileChanges(dir string) {
 			}
 		}
 	}
+}
+
+// remove a initial path prefix to get the relative path of a file
+func removePathPrefix(fullPath string, prefixPath string) string {
+	output := strings.TrimPrefix(fullPath, prefixPath)
+	// remove a leading file path separator, so that the path string doesn't look like it starts from the root directory (/...)
+	if rune(output[0]) == os.PathSeparator {
+		output = output[1:]
+	}
+	return output
 }
 
 // queues up a file change and triggers the file changes broadcast after a short delay
