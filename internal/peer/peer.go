@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -101,8 +100,7 @@ func RespondToHandshake(conn net.Conn, handshakeData m.Handshake, config c.Confi
 	fmt.Println("responding to handshake")
 
 	// send back handshake response
-	remoteAddr := conn.RemoteAddr().String()
-	remoteIP := strings.Split(remoteAddr, ":")[0] // remove the port number from the address
+	remoteIP := network.GetRemoteIP(conn)
 	bytes, err := json.Marshal(m.Handshake{
 		Type:     c.TYPE_DISCOVER_PEER,
 		Data:     remoteIP,        // echo their IP back, to confirm we are a legit node

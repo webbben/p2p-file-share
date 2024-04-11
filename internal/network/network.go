@@ -1,3 +1,4 @@
+// functions for getting network information
 package network
 
 import (
@@ -36,6 +37,16 @@ func GetLocalSubnetBase() string {
 		return "" // no periods found? so probably invalid IP found
 	}
 	return localIP[:lastIndex]
+}
+
+// gets the remote IP address from a connection, excluding the port number
+//
+// expects an input of "123.456.789:port", where a colon separates the IP from the port.
+//
+// TODO: what about IPs that have more than one pair of colons?  I think something like this might be possible:
+// [2001:db8::1]:80
+func GetRemoteIP(conn net.Conn) string {
+	return strings.Split(conn.RemoteAddr().String(), ":")[0]
 }
 
 // reads a buffer from a connection, detecting protocol-specified error messages at the same time

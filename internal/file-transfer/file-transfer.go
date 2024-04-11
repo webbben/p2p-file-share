@@ -1,3 +1,4 @@
+// functions for transfering files to and from nodes
 package filetransfer
 
 import (
