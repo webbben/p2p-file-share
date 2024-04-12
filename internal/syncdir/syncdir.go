@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -66,17 +67,20 @@ func WatchForFileChanges(dir string) {
 			fmt.Println("raw filename:", event.Name, "base dir:", dir)
 			filename := removePathPrefix(event.Name, dir)
 			if event.Op&fsnotify.Write == fsnotify.Write {
+				// file modified
 				log.Printf("Modified %s (%s)\n", event.Name, event.Op)
-				// Handle file modification
 				queueFileChange(filename, FILE_MOD)
-			}
-			if event.Op&fsnotify.Create == fsnotify.Create {
+			} else if event.Op&fsnotify.Create == fsnotify.Create {
+				// file created
 				log.Printf("Created %s (%s)\n", event.Name, event.Op)
-				// Handle file creation
-			}
-			if event.Op&fsnotify.Remove == fsnotify.Remove {
+				queueFileChange(filename, FILE_MOD)
+			} else if event.Op&fsnotify.Remove == fsnotify.Remove {
+				// file removed
 				log.Printf("Removed %s (%s)\n", event.Name, event.Op)
-				// Handle file removal
+				queueFileChange(filename, FILE_DEL)
+			} else {
+				// other change?
+				log.Printf("unknown file change: %s (%s)\n", event.Name, event.Op)
 			}
 		}
 	}
@@ -90,6 +94,14 @@ func removePathPrefix(fullPath string, prefixPath string) string {
 		output = output[1:]
 	}
 	return output
+}
+
+func getFullFilePath(filename string, config c.Config) string {
+	if config.SharedDirectoryPath == "" {
+		fmt.Println("failed to get full file path: missing config")
+		return ""
+	}
+	return filepath.Join(config.SharedDirectoryPath, filename)
 }
 
 // queues up a file change and triggers the file changes broadcast after a short delay
@@ -138,7 +150,7 @@ func shipFileChanges() {
 }
 
 // handle a file change notification sent to this node from a peer
-func HandleRemoteFileChange(fileChange m.NotifyFileChange, remoteIP string) {
+func HandleRemoteFileChange(fileChange m.NotifyFileChange, remoteIP string, config c.Config) {
 	if fileChange.File == "" {
 		fmt.Println("error handling remote file change: no file name provided")
 		return
@@ -164,5 +176,13 @@ func HandleRemoteFileChange(fileChange m.NotifyFileChange, remoteIP string) {
 	case FILE_DEL:
 		// delete the file
 		fmt.Println("received file deletion change")
+		filePath := getFullFilePath(fileChange.File, config)
+		if filePath == "" {
+			fmt.Println("failed to delete file; no filepath provided")
+			return
+		}
+		if err := os.Remove(filePath); err != nil {
+			fmt.Println("failed to remove file:", err)
+		}
 	}
 }
