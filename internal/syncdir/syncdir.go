@@ -49,11 +49,13 @@ func WatchForFileChanges(dir string) {
 	}
 
 	// watch for file events
+fileWatcher:
 	for {
 		select {
 		case event, ok := <-watcher.Events:
 			if !ok {
-				return
+				log.Println("WARNING: file change watcher closed unexpectedly!")
+				break fileWatcher
 			}
 			// ignore if these changes are just being transferred from other nodes
 			if applyingRemoteChanges {
@@ -82,8 +84,18 @@ func WatchForFileChanges(dir string) {
 				// other change?
 				log.Printf("unknown file change: %s (%s)\n", event.Name, event.Op)
 			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				log.Println("WARNING: file watcher encountered an error!")
+				break fileWatcher
+			}
+			log.Println("File watcher error:", err)
 		}
 	}
+	// if an error occurs with fsnotify, try waiting a few seconds before restarting
+	fmt.Println("Restarting file watcher in a few seconds...")
+	time.Sleep(5 * time.Second)
+	go WatchForFileChanges(dir)
 }
 
 // remove a initial path prefix to get the relative path of a file
