@@ -83,7 +83,7 @@ func handleConnection(conn net.Conn, config c.Config) {
 			return
 		}
 		fmt.Println("file change!", structMsg)
-		syncdir.HandleRemoteFileChange(structMsg, remoteIP)
+		syncdir.HandleRemoteFileChange(structMsg, remoteIP, config)
 	}
 }
 
