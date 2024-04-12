@@ -25,8 +25,9 @@ const (
 )
 
 var (
-	changeFlag   bool         = false          // flag for when changes have been detected
-	changedFiles []FileChange = []FileChange{} // file changes queued up to be broadcast
+	changeFlag            bool         = false          // flag for when changes have been detected
+	changedFiles          []FileChange = []FileChange{} // file changes queued up to be broadcast
+	applyingRemoteChanges bool         = false          // flag for when remote changes are being applied
 )
 
 // start watching for file changes in the shared file directory, so changes can be communicated to other nodes
@@ -51,6 +52,11 @@ func WatchForFileChanges(dir string) {
 		select {
 		case event, ok := <-watcher.Events:
 			if !ok {
+				return
+			}
+			// ignore if these changes are just being transferred from other nodes
+			if applyingRemoteChanges {
+				fmt.Println("remote change: ignore file event")
 				return
 			}
 			// ignore .swp files, which linux generates while editing some files
@@ -94,7 +100,7 @@ func queueFileChange(file string, changeType string) {
 		return
 	}
 	// ship the file changes after a short delay, to make sure any simultaneous file changes are all accounted for together
-	// sometimes when a file is changed, fsnotify notices more than one file change (a WRITE and CHMOD, for example), and we don't want to send out duplicate file change notifications in such cases.
+	// sometimes when a file is changed, under the hood there are multiple changes occurring (a WRITE and CHMOD, for example), and we don't want to send out multiple file change notifications in such cases.
 	if !changeFlag {
 		go func() {
 			time.Sleep(1 * time.Second)
@@ -141,6 +147,12 @@ func HandleRemoteFileChange(fileChange m.NotifyFileChange, remoteIP string) {
 		fmt.Println("error handling remote file change: no file change type provided (needs mod, del, etc)")
 		return
 	}
+	// flag that incoming changes are remote - and shouldn't be rebroadcasted
+	applyingRemoteChanges = true
+	defer func() {
+		applyingRemoteChanges = false
+	}()
+
 	switch fileChange.Change {
 	case FILE_MOD:
 		_, err := filetransfer.RequestFile(remoteIP, fileChange.File)
