@@ -11,6 +11,7 @@ const (
 	TYPE_DISCOVER_PEER      string = "discover_peer"
 	TYPE_FILE_REQUEST       string = "file_request"
 	TYPE_FILE_CHANGE_NOTIFY string = "file_change_notify"
+	TYPE_SCAN_FILES         string = "scan_files"
 )
 
 const (

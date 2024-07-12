@@ -28,6 +28,23 @@ func (n NotifyFileChange) String() string {
 	return fmt.Sprintf("%s (%s)", n.File, n.Change)
 }
 
+// message for where only the type is needed; no special content needs to be passed
+type MiscMessage struct {
+	Type string `json:"type"`
+}
+
+// a summary of the files on a node
+type NodeFileSummary struct {
+	Type  string     `json:"type"`
+	Files []FileInfo `json:"files"`
+}
+
+// information about a file
+type FileInfo struct {
+	Name     string `json:"name"`
+	Checksum string `json:"cksm"`
+}
+
 type Peer struct {
 	IP       string `json:"ip"`
 	Nickname string `json:"nickname"`

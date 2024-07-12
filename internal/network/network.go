@@ -67,3 +67,8 @@ func ReadBuffer(conn net.Conn, bufferSize int) ([]byte, error) {
 	}
 	return buf[:n], nil
 }
+
+// forms the socket address from an ip and port; for ease of use
+func FormatSocketAddr(ip string, port int) string {
+	return fmt.Sprintf("%s:%v", ip, port)
+}

@@ -49,53 +49,67 @@ func WatchForFileChanges(dir string) {
 	}
 
 	// watch for file events
-fileWatcher:
 	for {
-		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				log.Println("WARNING: file change watcher closed unexpectedly!")
-				break fileWatcher
-			}
-			// ignore if these changes are just being transferred from other nodes
-			if applyingRemoteChanges {
-				fmt.Println("remote change: ignore file event")
-				return
-			}
-			// ignore .swp files, which linux generates while editing some files
-			if strings.HasSuffix(event.Name, ".swp") {
-				continue
-			}
-			fmt.Println("raw filename:", event.Name, "base dir:", dir)
-			filename := removePathPrefix(event.Name, dir)
-			if event.Op&fsnotify.Write == fsnotify.Write {
-				// file modified
-				log.Printf("Modified %s (%s)\n", event.Name, event.Op)
-				queueFileChange(filename, FILE_MOD)
-			} else if event.Op&fsnotify.Create == fsnotify.Create {
-				// file created
-				log.Printf("Created %s (%s)\n", event.Name, event.Op)
-				queueFileChange(filename, FILE_MOD)
-			} else if event.Op&fsnotify.Remove == fsnotify.Remove {
-				// file removed
-				log.Printf("Removed %s (%s)\n", event.Name, event.Op)
-				queueFileChange(filename, FILE_DEL)
-			} else {
-				// other change?
-				log.Printf("unknown file change: %s (%s)\n", event.Name, event.Op)
-			}
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				log.Println("WARNING: file watcher encountered an error!")
-				break fileWatcher
-			}
-			log.Println("File watcher error:", err)
+		fileChange, restart := awaitNextFileChange(watcher, dir)
+		if restart {
+			break
 		}
+		if fileChange == nil {
+			continue
+		}
+		queueFileChange(*fileChange)
 	}
 	// if an error occurs with fsnotify, try waiting a few seconds before restarting
 	fmt.Println("Restarting file watcher in a few seconds...")
 	time.Sleep(5 * time.Second)
 	go WatchForFileChanges(dir)
+}
+
+// return the next filechange
+//
+// returns: FileChange, whether to restart filewatcher (e.g. if an error happens and we want to restart)
+func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) (*FileChange, bool) {
+	select {
+	case event, ok := <-watcher.Events:
+		if !ok {
+			log.Println("WARNING: file change watcher closed unexpectedly!")
+			return nil, true
+		}
+		// ignore if these changes are just being transferred from other nodes
+		if applyingRemoteChanges {
+			fmt.Println("remote change: ignore file event")
+			return nil, false
+		}
+		// ignore .swp files, which linux generates while editing some files
+		if strings.HasSuffix(event.Name, ".swp") {
+			return nil, false
+		}
+		fmt.Println("raw filename:", event.Name, "base dir:", dir)
+		filename := removePathPrefix(event.Name, dir)
+		if event.Op&fsnotify.Write == fsnotify.Write {
+			// file modified
+			log.Printf("Modified %s (%s)\n", event.Name, event.Op)
+			return &FileChange{File: filename, Change: FILE_MOD}, false
+		} else if event.Op&fsnotify.Create == fsnotify.Create {
+			// file created
+			log.Printf("Created %s (%s)\n", event.Name, event.Op)
+			return &FileChange{File: filename, Change: FILE_MOD}, false
+		} else if event.Op&fsnotify.Remove == fsnotify.Remove {
+			// file removed
+			log.Printf("Removed %s (%s)\n", event.Name, event.Op)
+			return &FileChange{File: filename, Change: FILE_DEL}, false
+		} else {
+			// other change?
+			log.Printf("unhandled file change: %s (%s)\n", event.Name, event.Op)
+		}
+	case err, ok := <-watcher.Errors:
+		if !ok {
+			log.Println("WARNING: file watcher encountered an error!")
+			return nil, true
+		}
+		log.Println("File watcher error:", err)
+	}
+	return nil, false
 }
 
 // remove a initial path prefix to get the relative path of a file
@@ -117,9 +131,9 @@ func getFullFilePath(filename string, config c.Config) string {
 }
 
 // queues up a file change and triggers the file changes broadcast after a short delay
-func queueFileChange(file string, changeType string) {
-	file = strings.TrimSpace(file)
-	if file == "" {
+func queueFileChange(fileChange FileChange) {
+	fileChange.File = strings.TrimSpace(fileChange.File)
+	if fileChange.File == "" {
 		fmt.Println("failed to queue change: empty file name!")
 		return
 	}
@@ -132,12 +146,16 @@ func queueFileChange(file string, changeType string) {
 		}()
 		changeFlag = true
 	}
+	// make sure the given filechange isn't already queued
 	for _, f := range changedFiles {
-		if f.File == file {
+		if f.File == fileChange.File {
+			if f.Change != fileChange.Change {
+				log.Printf("file (%s) already queued, but has a different change type? (prev: %s, new: %s)\n", f.File, f.Change, fileChange.Change)
+			}
 			return
 		}
 	}
-	changedFiles = append(changedFiles, FileChange{File: file, Change: changeType})
+	changedFiles = append(changedFiles, fileChange)
 }
 
 // ships file changes to be broadcast to other nodes.
