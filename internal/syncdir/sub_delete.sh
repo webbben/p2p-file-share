@@ -1,0 +1,4 @@
+#!/bin/bash
+cd $SYNCDIR_ROOT
+cd $SYNCDIR_SUB
+rm $SYNCDIR_SUB_FILENAME

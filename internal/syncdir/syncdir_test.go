@@ -8,11 +8,67 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/webbben/p2p-file-share/internal/util"
 )
 
+type ANFCTestCase struct {
+	ScriptName string
+	Exp        FileChange
+	Name       string
+}
+
 func TestAwaitNextFileChange(t *testing.T) {
+	testCases := []ANFCTestCase{
+		{
+			ScriptName: "create.sh",
+			Exp: FileChange{
+				File:   "somefile.txt",
+				Change: FILE_MOD,
+			},
+			Name: "Create file",
+		},
+		{
+			ScriptName: "modify.sh",
+			Exp: FileChange{
+				File:   "somefile.txt",
+				Change: FILE_MOD,
+			},
+			Name: "Modify file",
+		},
+		{
+			ScriptName: "delete.sh",
+			Exp: FileChange{
+				File:   "somefile.txt",
+				Change: FILE_DEL,
+			},
+			Name: "Delete file",
+		},
+		{
+			ScriptName: "sub_create.sh",
+			Exp: FileChange{
+				File:   "sub_directory/anotherfile.txt",
+				Change: FILE_MOD,
+			},
+			Name: "Create file in sub directory",
+		},
+		{
+			ScriptName: "sub_modify.sh",
+			Exp: FileChange{
+				File:   "sub_directory/anotherfile.txt",
+				Change: FILE_MOD,
+			},
+			Name: "Modify file in sub directory",
+		},
+		{
+			ScriptName: "sub_delete.sh",
+			Exp: FileChange{
+				File:   "sub_directory/anotherfile.txt",
+				Change: FILE_DEL,
+			},
+			Name: "Modify file in sub directory",
+		},
+	}
+
 	wd := util.Getwd()
 	if wd == "" {
 		t.Error("failed to get working directory")
@@ -26,22 +82,22 @@ func TestAwaitNextFileChange(t *testing.T) {
 	// delete the testwatch directory after the tests are done
 	defer os.RemoveAll(testdir)
 
-	watcher, err := fsnotify.NewWatcher()
+	watcher, err := getWatcher(testdir)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	defer watcher.Close()
 
-	err = watcher.Add(testdir)
-	if err != nil {
-		t.Error(err)
-		return
+	// env variables for the test scripts to use
+	envVars := map[string]string{
+		"SYNCDIR_ROOT":         testdir,
+		"SYNCDIR_SUB":          "sub_directory",
+		"SYNCDIR_SUB_FILENAME": "anotherfile.txt",
+		"SYNCDIR_FILENAME":     "somefile.txt",
 	}
-
-	testfile := filepath.Join(testdir, "somefile.txt")
-	if err = os.Setenv("SYNCDIR_FILENAME", testfile); err != nil {
-		t.Error("error setting env var:", err)
+	if err = util.SetEnvVars(envVars); err != nil {
+		t.Error("error setting env vars:", err)
 		return
 	}
 
@@ -57,42 +113,18 @@ func TestAwaitNextFileChange(t *testing.T) {
 			detectedChange = *change
 		}
 	}()
-
-	// create file
-	if err = exec.Command("bash", filepath.Join(wd, "create.sh")).Run(); err != nil {
-		t.Error("failed to create file:", err)
-		return
-	}
-	exp := FileChange{File: "somefile.txt", Change: FILE_MOD}
+	// wait a second to make sure the file change watcher is working
 	time.Sleep(100 * time.Millisecond)
-	if detectedChange.File != exp.File || detectedChange.Change != exp.Change {
-		t.Errorf("Create file: wrong file change detected. expected: %q, got: %q", exp, detectedChange)
-		return
-	}
-	detectedChange = FileChange{}
 
-	// change file
-	if err = exec.Command("bash", filepath.Join(wd, "modify.sh")).Run(); err != nil {
-		t.Error("failed to modify file:", err)
-		return
-	}
-	exp = FileChange{File: "somefile.txt", Change: FILE_MOD}
-	time.Sleep(100 * time.Millisecond)
-	if detectedChange.File != exp.File || detectedChange.Change != exp.Change {
-		t.Errorf("Modify file: wrong file change detected. expected: %q, got: %q", exp, detectedChange)
-		return
-	}
-	detectedChange = FileChange{}
-
-	// delete file
-	if err = exec.Command("bash", filepath.Join(wd, "delete.sh")).Run(); err != nil {
-		t.Error("failed to delete file:", err)
-		return
-	}
-	exp = FileChange{File: "somefile.txt", Change: FILE_DEL}
-	time.Sleep(100 * time.Millisecond)
-	if detectedChange.File != exp.File || detectedChange.Change != exp.Change {
-		t.Errorf("Delete file: wrong file change detected. expected: %q, got: %q", exp, detectedChange)
-		return
+	for _, testCase := range testCases {
+		if err = exec.Command("bash", filepath.Join(wd, testCase.ScriptName)).Run(); err != nil {
+			t.Error(testCase.Name+":", err)
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+		if detectedChange.File != testCase.Exp.File || detectedChange.Change != testCase.Exp.Change {
+			t.Errorf("%s: wrong file change detected. expected: %q, got: %q", testCase.Name, testCase.Exp, detectedChange)
+		}
+		detectedChange = FileChange{}
 	}
 }

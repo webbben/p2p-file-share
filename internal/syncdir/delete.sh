@@ -1,2 +1,3 @@
 #!/bin/bash
+cd $SYNCDIR_ROOT
 rm $SYNCDIR_FILENAME

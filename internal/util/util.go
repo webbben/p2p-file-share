@@ -26,3 +26,13 @@ func Getwd() string {
 func EnsureDir(dir string) error {
 	return os.MkdirAll(dir, os.ModePerm)
 }
+
+// sets a bunch of environment variables from the given map.
+func SetEnvVars(varMap map[string]string) error {
+	for k, v := range varMap {
+		if err := os.Setenv(k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}

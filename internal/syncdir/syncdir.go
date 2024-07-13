@@ -37,16 +37,11 @@ func WatchForFileChanges(dir string) {
 		log.Println("Failed to watch for file changes: no directory specified.")
 		return
 	}
-	watcher, err := fsnotify.NewWatcher()
+	watcher, err := getWatcher(dir)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("failed to set up file watcher:", err)
 	}
 	defer watcher.Close()
-
-	err = watcher.Add(dir)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	// watch for file events
 	for {
@@ -63,6 +58,38 @@ func WatchForFileChanges(dir string) {
 	fmt.Println("Restarting file watcher in a few seconds...")
 	time.Sleep(5 * time.Second)
 	go WatchForFileChanges(dir)
+}
+
+// makes a watcher that watches for file changes in the given directory and all sub-directories
+func getWatcher(dir string) (*fsnotify.Watcher, error) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = watcher.Add(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	// recursively add all sub-directories to the watcher too
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			err = watcher.Add(path)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return watcher, nil
 }
 
 // return the next filechange
