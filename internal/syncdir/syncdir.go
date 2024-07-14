@@ -13,11 +13,22 @@ import (
 	filetransfer "github.com/webbben/p2p-file-share/internal/file-transfer"
 	messagebroker "github.com/webbben/p2p-file-share/internal/message-broker"
 	m "github.com/webbben/p2p-file-share/internal/model"
+	"github.com/webbben/p2p-file-share/internal/util"
 )
 
 type FileChange struct {
-	File   string
-	Change string
+	File     string
+	FullPath string // full path of the file that was changed
+	Change   string
+	IsDir    bool
+}
+
+func (fc FileChange) String() string {
+	return fmt.Sprintf("%s (%s)", fc.File, fc.Change)
+}
+
+func (fc FileChange) IsSame(c FileChange) bool {
+	return fc.File == c.File && fc.Change == c.Change
 }
 
 const (
@@ -45,18 +56,20 @@ func WatchForFileChanges(dir string) {
 
 	// watch for file events
 	for {
-		fileChange, restart := awaitNextFileChange(watcher, dir)
+		fileChanges, restart := awaitNextFileChange(watcher, dir)
 		if restart {
 			break
 		}
-		if fileChange == nil {
+		if fileChanges == nil {
 			continue
 		}
-		queueFileChange(*fileChange)
+		for _, change := range fileChanges {
+			queueFileChange(change)
+		}
 	}
 	// if an error occurs with fsnotify, try waiting a few seconds before restarting
-	fmt.Println("Restarting file watcher in a few seconds...")
-	time.Sleep(5 * time.Second)
+	fmt.Println("Restarting file watcher in a second...")
+	time.Sleep(1 * time.Second)
 	go WatchForFileChanges(dir)
 }
 
@@ -95,7 +108,7 @@ func getWatcher(dir string) (*fsnotify.Watcher, error) {
 // return the next filechange
 //
 // returns: FileChange, whether to restart filewatcher (e.g. if an error happens and we want to restart)
-func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) (*FileChange, bool) {
+func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) ([]FileChange, bool) {
 	select {
 	case event, ok := <-watcher.Events:
 		if !ok {
@@ -111,20 +124,52 @@ func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) (*FileChange, bo
 		if strings.HasSuffix(event.Name, ".swp") {
 			return nil, false
 		}
+		isDir, err := util.IsDirectory(event.Name)
+		if isDir {
+			log.Println("directory change detected")
+		}
+		if err != nil {
+			log.Println("failed to get file info:", err)
+			return nil, false
+		}
 		fmt.Println("raw filename:", event.Name, "base dir:", dir)
-		filename := removePathPrefix(event.Name, dir)
+		fileChange := FileChange{
+			File:     removePathPrefix(event.Name, dir),
+			IsDir:    isDir,
+			FullPath: event.Name,
+		}
 		if event.Op&fsnotify.Write == fsnotify.Write {
 			// file modified
 			log.Printf("Modified %s (%s)\n", event.Name, event.Op)
-			return &FileChange{File: filename, Change: FILE_MOD}, false
+			fileChange.Change = FILE_MOD
+			return []FileChange{fileChange}, false
 		} else if event.Op&fsnotify.Create == fsnotify.Create {
 			// file created
 			log.Printf("Created %s (%s)\n", event.Name, event.Op)
-			return &FileChange{File: filename, Change: FILE_MOD}, false
+			// if its a new directory, add any files found under it
+			if fileChange.IsDir {
+				changes := make([]FileChange, 0)
+				nestedFiles, err := util.GetAllFilesUnderDirectory(fileChange.FullPath)
+				if err != nil {
+					log.Println("failed to get nested files:", err)
+					return nil, false
+				}
+				log.Println("files added from new directory:", nestedFiles)
+				for _, file := range nestedFiles {
+					changes = append(changes, FileChange{
+						File:   removePathPrefix(file, dir),
+						Change: FILE_MOD,
+					})
+				}
+				return changes, false
+			}
+			fileChange.Change = FILE_MOD
+			return []FileChange{fileChange}, false
 		} else if event.Op&fsnotify.Remove == fsnotify.Remove {
 			// file removed
 			log.Printf("Removed %s (%s)\n", event.Name, event.Op)
-			return &FileChange{File: filename, Change: FILE_DEL}, false
+			fileChange.Change = FILE_DEL
+			return []FileChange{fileChange}, false
 		} else {
 			// other change?
 			log.Printf("unhandled file change: %s (%s)\n", event.Name, event.Op)

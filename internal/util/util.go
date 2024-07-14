@@ -36,3 +36,26 @@ func SetEnvVars(varMap map[string]string) error {
 	}
 	return nil
 }
+
+func IsDirectory(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	return info.IsDir(), nil
+}
+
+// Gets all files under a directory. returns a list of their absolute paths. ignores directories.
+func GetAllFilesUnderDirectory(dir string) ([]string, error) {
+	files := make([]string, 0)
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			files = append(files, path)
+		}
+		return nil
+	})
+	return files, err
+}
