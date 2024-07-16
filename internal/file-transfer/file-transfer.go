@@ -83,6 +83,10 @@ func receiveFile(conn net.Conn, filePath string) error {
 	// Create or open the file for writing
 	mountDir := config.GetMountDir(nil) // TODO pass in the config instead of loading it each time
 	fullPath := filepath.Join(mountDir, filePath)
+	dir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return errors.New("failed to create directory for new file: " + err.Error())
+	}
 	file, err := os.Create(fullPath)
 	if err != nil {
 		return err

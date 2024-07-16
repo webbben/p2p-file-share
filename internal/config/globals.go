@@ -8,10 +8,14 @@ const (
 
 // message types
 const (
-	TYPE_DISCOVER_PEER      string = "discover_peer"
-	TYPE_FILE_REQUEST       string = "file_request"
+	// message meant for discovering a peer node
+	TYPE_DISCOVER_PEER string = "discover_peer"
+	// message for requesting a file from another node
+	TYPE_FILE_REQUEST string = "file_request"
+	// message for notifying another node of a file change
 	TYPE_FILE_CHANGE_NOTIFY string = "file_change_notify"
-	TYPE_SCAN_FILES         string = "scan_files"
+	// message from a node that wants to scan this node's files
+	TYPE_SCAN_FILES string = "scan_files"
 )
 
 const (

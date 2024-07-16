@@ -21,6 +21,7 @@ type FileRequest struct {
 type NotifyFileChange struct {
 	Type   string `json:"type"`
 	File   string `json:"file"`   // the path of the file (relative to the mount directory)
+	IsDir  bool   `json:"is_dir"` // whether or not this file is a directory
 	Change string `json:"change"` // the type of change that occurred, e.g. modified, deleted, etc.
 }
 

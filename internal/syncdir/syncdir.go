@@ -274,6 +274,7 @@ func shipFileChanges() {
 		messagebroker.BroadcastMessage(m.NotifyFileChange{
 			Type:   c.TYPE_FILE_CHANGE_NOTIFY,
 			File:   fileChange.File,
+			IsDir:  fileChange.IsDir,
 			Change: fileChange.Change,
 		})
 	}
@@ -282,11 +283,11 @@ func shipFileChanges() {
 // handle a file change notification sent to this node from a peer
 func HandleRemoteFileChange(fileChange m.NotifyFileChange, remoteIP string, config c.Config) {
 	if fileChange.File == "" {
-		fmt.Println("error handling remote file change: no file name provided")
+		log.Println("error handling remote file change: no file name provided")
 		return
 	}
 	if fileChange.Change == "" {
-		fmt.Println("error handling remote file change: no file change type provided (needs mod, del, etc)")
+		log.Println("error handling remote file change: no file change type provided (needs mod, del, etc)")
 		return
 	}
 	// flag that incoming changes are remote - and shouldn't be rebroadcasted
@@ -299,7 +300,7 @@ func HandleRemoteFileChange(fileChange m.NotifyFileChange, remoteIP string, conf
 	case FILE_MOD:
 		_, err := filetransfer.RequestFile(remoteIP, fileChange.File)
 		if err != nil {
-			fmt.Println("error requesting file change:", err)
+			log.Println("error requesting file change:", err)
 			return
 		}
 		fmt.Println("successfully retrieved file change from peer:", fileChange.File)
@@ -308,11 +309,17 @@ func HandleRemoteFileChange(fileChange m.NotifyFileChange, remoteIP string, conf
 		fmt.Println("received file deletion change")
 		filePath := getFullFilePath(fileChange.File, config)
 		if filePath == "" {
-			fmt.Println("failed to delete file; no filepath provided")
+			log.Println("failed to delete file; no filepath provided")
+			return
+		}
+		if fileChange.IsDir {
+			if err := os.RemoveAll(filePath); err != nil {
+				log.Println("failed to remove directory:", err)
+			}
 			return
 		}
 		if err := os.Remove(filePath); err != nil {
-			fmt.Println("failed to remove file:", err)
+			log.Println("failed to remove file:", err)
 		}
 	}
 }
