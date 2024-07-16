@@ -28,7 +28,7 @@ func (fc FileChange) String() string {
 }
 
 func (fc FileChange) IsSame(c FileChange) bool {
-	return fc.File == c.File && fc.Change == c.Change
+	return fc.File == c.File && fc.Change == c.Change && fc.IsDir == c.IsDir
 }
 
 const (
@@ -40,7 +40,22 @@ var (
 	changeFlag            bool         = false          // flag for when changes have been detected
 	changedFiles          []FileChange = []FileChange{} // file changes queued up to be broadcast
 	applyingRemoteChanges bool         = false          // flag for when remote changes are being applied
+
+	fileIndex map[string]os.FileInfo // index of all files and their info
 )
+
+func GetIndexedFileInfo(filename string) os.FileInfo {
+	return fileIndex[filename]
+}
+
+func RefreshFileIndex(dir string) {
+	index, err := util.IndexDirectory(dir)
+	if err != nil {
+		log.Printf("failed to index %s: %s", dir, err)
+		return
+	}
+	fileIndex = index
+}
 
 // start watching for file changes in the shared file directory, so changes can be communicated to other nodes
 func WatchForFileChanges(dir string) {
@@ -54,17 +69,16 @@ func WatchForFileChanges(dir string) {
 	}
 	defer watcher.Close()
 
+	RefreshFileIndex(dir)
+
 	// watch for file events
 	for {
 		fileChanges, restart := awaitNextFileChange(watcher, dir)
-		if restart {
-			break
-		}
-		if fileChanges == nil {
-			continue
-		}
 		for _, change := range fileChanges {
 			queueFileChange(change)
+		}
+		if restart {
+			break
 		}
 	}
 	// if an error occurs with fsnotify, try waiting a few seconds before restarting
@@ -109,6 +123,13 @@ func getWatcher(dir string) (*fsnotify.Watcher, error) {
 //
 // returns: FileChange, whether to restart filewatcher (e.g. if an error happens and we want to restart)
 func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) ([]FileChange, bool) {
+	refreshIndex := false
+	defer func() {
+		if refreshIndex {
+			RefreshFileIndex(dir)
+		}
+	}()
+
 	select {
 	case event, ok := <-watcher.Events:
 		if !ok {
@@ -120,22 +141,13 @@ func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) ([]FileChange, b
 			fmt.Println("remote change: ignore file event")
 			return nil, false
 		}
-		// ignore .swp files, which linux generates while editing some files
-		if strings.HasSuffix(event.Name, ".swp") {
+		if ignoreFile(event.Name) {
 			return nil, false
 		}
-		isDir, err := util.IsDirectory(event.Name)
-		if isDir {
-			log.Println("directory change detected")
-		}
-		if err != nil {
-			log.Println("failed to get file info:", err)
-			return nil, false
-		}
+
 		fmt.Println("raw filename:", event.Name, "base dir:", dir)
 		fileChange := FileChange{
-			File:     removePathPrefix(event.Name, dir),
-			IsDir:    isDir,
+			File:     util.RemovePathPrefix(event.Name, dir),
 			FullPath: event.Name,
 		}
 		if event.Op&fsnotify.Write == fsnotify.Write {
@@ -144,10 +156,16 @@ func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) ([]FileChange, b
 			fileChange.Change = FILE_MOD
 			return []FileChange{fileChange}, false
 		} else if event.Op&fsnotify.Create == fsnotify.Create {
+			refreshIndex = true
 			// file created
 			log.Printf("Created %s (%s)\n", event.Name, event.Op)
 			// if its a new directory, add any files found under it
-			if fileChange.IsDir {
+			isDir, err := util.IsDirectory(event.Name)
+			if err != nil {
+				log.Println("failed to get file info:", err)
+			}
+			fileChange.IsDir = isDir
+			if isDir {
 				changes := make([]FileChange, 0)
 				nestedFiles, err := util.GetAllFilesUnderDirectory(fileChange.FullPath)
 				if err != nil {
@@ -157,17 +175,24 @@ func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) ([]FileChange, b
 				log.Println("files added from new directory:", nestedFiles)
 				for _, file := range nestedFiles {
 					changes = append(changes, FileChange{
-						File:   removePathPrefix(file, dir),
+						File:   util.RemovePathPrefix(file, dir),
 						Change: FILE_MOD,
 					})
 				}
-				return changes, false
+				// restart filewatcher too, since we need to add new paths to the watcher
+				return changes, true
 			}
 			fileChange.Change = FILE_MOD
 			return []FileChange{fileChange}, false
 		} else if event.Op&fsnotify.Remove == fsnotify.Remove {
+			refreshIndex = true
 			// file removed
 			log.Printf("Removed %s (%s)\n", event.Name, event.Op)
+			// get file info from previous index, since the file no longer exists
+			fileInfo := GetIndexedFileInfo(fileChange.File)
+			if fileInfo.IsDir() {
+				fileChange.IsDir = true
+			}
 			fileChange.Change = FILE_DEL
 			return []FileChange{fileChange}, false
 		} else {
@@ -176,7 +201,7 @@ func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) ([]FileChange, b
 		}
 	case err, ok := <-watcher.Errors:
 		if !ok {
-			log.Println("WARNING: file watcher encountered an error!")
+			log.Println("WARNING! file watcher encountered an error:", err)
 			return nil, true
 		}
 		log.Println("File watcher error:", err)
@@ -184,14 +209,17 @@ func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) ([]FileChange, b
 	return nil, false
 }
 
-// remove a initial path prefix to get the relative path of a file
-func removePathPrefix(fullPath string, prefixPath string) string {
-	output := strings.TrimPrefix(fullPath, prefixPath)
-	// remove a leading file path separator, so that the path string doesn't look like it starts from the root directory (/...)
-	if rune(output[0]) == os.PathSeparator {
-		output = output[1:]
+// returns whether the file should be ignored or not, such as if it's some autogenerated file for specific OS
+func ignoreFile(filename string) bool {
+	// ignore .swp files, which linux generates while editing some files
+	if strings.HasSuffix(filename, ".swp") {
+		return true
 	}
-	return output
+	// ignore .DS_Store files, which is just metadata for directories in macOS
+	if strings.HasSuffix(filename, ".DS_Store") {
+		return true
+	}
+	return false
 }
 
 func getFullFilePath(filename string, config c.Config) string {

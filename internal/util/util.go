@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // gets the current working directory of the project code. mainly used for debugging, unit tests, etc.
@@ -58,4 +59,31 @@ func GetAllFilesUnderDirectory(dir string) ([]string, error) {
 		return nil
 	})
 	return files, err
+}
+
+// remove a initial path prefix to get the relative path of a file
+func RemovePathPrefix(fullPath string, prefixPath string) string {
+	output := strings.TrimPrefix(fullPath, prefixPath)
+	if output == "" {
+		return ""
+	}
+	// remove a leading file path separator, so that the path string doesn't look like it starts from the root directory (/...)
+	if rune(output[0]) == os.PathSeparator {
+		output = output[1:]
+	}
+	return output
+}
+
+// indexes a directory, mapping each file or sub-directory to its FileInfo
+func IndexDirectory(dir string) (map[string]os.FileInfo, error) {
+	index := make(map[string]os.FileInfo)
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		trimmedPath := RemovePathPrefix(path, dir)
+		index[trimmedPath] = info
+		return nil
+	})
+	return index, err
 }

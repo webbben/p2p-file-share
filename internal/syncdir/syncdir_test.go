@@ -24,6 +24,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 			Exp: []FileChange{
 				{
 					File:   "somefile.txt",
+					IsDir:  false,
 					Change: FILE_MOD,
 				},
 			},
@@ -33,6 +34,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 			ScriptName: "modify.sh",
 			Exp: []FileChange{{
 				File:   "somefile.txt",
+				IsDir:  false,
 				Change: FILE_MOD,
 			}},
 			Name: "Modify file",
@@ -41,6 +43,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 			ScriptName: "delete.sh",
 			Exp: []FileChange{{
 				File:   "somefile.txt",
+				IsDir:  false,
 				Change: FILE_DEL,
 			}},
 			Name: "Delete file",
@@ -49,6 +52,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 			ScriptName: "sub_create.sh",
 			Exp: []FileChange{{
 				File:   "sub_directory/anotherfile.txt",
+				IsDir:  false,
 				Change: FILE_MOD,
 			}},
 			Name: "Create file in sub directory",
@@ -57,6 +61,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 			ScriptName: "sub_modify.sh",
 			Exp: []FileChange{{
 				File:   "sub_directory/anotherfile.txt",
+				IsDir:  false,
 				Change: FILE_MOD,
 			}},
 			Name: "Modify file in sub directory",
@@ -65,6 +70,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 			ScriptName: "sub_delete.sh",
 			Exp: []FileChange{{
 				File:   "sub_directory/anotherfile.txt",
+				IsDir:  false,
 				Change: FILE_DEL,
 			}},
 			Name: "Delete file in sub directory",
@@ -74,22 +80,35 @@ func TestAwaitNextFileChange(t *testing.T) {
 			Exp: []FileChange{
 				{
 					File:   "copydir/a.txt",
+					IsDir:  false,
 					Change: FILE_MOD,
 				},
 				{
 					File:   "copydir/b.txt",
+					IsDir:  false,
 					Change: FILE_MOD,
 				},
 				{
 					File:   "copydir/x/c.txt",
+					IsDir:  false,
 					Change: FILE_MOD,
 				},
 				{
 					File:   "copydir/x/y/d.txt",
+					IsDir:  false,
 					Change: FILE_MOD,
 				},
 			},
 			Name: "Copy directory",
+		},
+		{
+			ScriptName: "delete_dir.sh",
+			Exp: []FileChange{{
+				File:   "copydir",
+				IsDir:  true,
+				Change: FILE_DEL,
+			}},
+			Name: "Delete directory",
 		},
 	}
 
@@ -112,6 +131,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	watcherOpen := true
 	defer watcher.Close()
 
 	// env variables for the test scripts to use
@@ -135,13 +155,22 @@ func TestAwaitNextFileChange(t *testing.T) {
 	}
 
 	// start tracking file changes
+	RefreshFileIndex(testdir)
 	detectedChanges := make([]FileChange, 0)
 	go func() {
+		restartCount := 0
 		for {
 			changes, restart := awaitNextFileChange(watcher, testdir)
 			if restart {
+				if !watcherOpen {
+					break
+				}
+				restartCount++
 				log.Println("watcher restart?")
-				return
+				if restartCount > 3 {
+					t.Error("too many watcher restarts; something bad must be happening...")
+					return
+				}
 			}
 			detectedChanges = changes
 		}
@@ -150,6 +179,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	for _, testCase := range testCases {
+		log.Printf("%s: Begin\n", testCase.Name)
 		if err = exec.Command("bash", filepath.Join(wd, testCase.ScriptName)).Run(); err != nil {
 			t.Error(testCase.Name+":", err)
 			return
@@ -173,5 +203,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 			t.Log("got:", detectedChanges)
 		}
 		detectedChanges = make([]FileChange, 0)
+		log.Printf("%s: End\n", testCase.Name)
 	}
+	watcherOpen = false
 }
