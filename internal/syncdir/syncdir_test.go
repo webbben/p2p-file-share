@@ -184,7 +184,18 @@ func TestAwaitNextFileChange(t *testing.T) {
 			t.Error(testCase.Name+":", err)
 			return
 		}
-		time.Sleep(100 * time.Millisecond)
+
+		// wait up to 5-ish seconds for new changes to come in.
+		// in reality it should only take at most a couple hundred milliseconds
+		count := 0
+		for len(detectedChanges) == 0 {
+			time.Sleep(100 * time.Millisecond)
+			count++
+			if count > 50 {
+				t.Log("waiting for changes too long...")
+				break
+			}
+		}
 		for _, expChange := range testCase.Exp {
 			found := false
 			for _, change := range detectedChanges {
