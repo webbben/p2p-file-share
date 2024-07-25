@@ -219,6 +219,7 @@ func awaitNextFileChange(watcher *fsnotify.Watcher, dir string) ([]FileChange, b
 
 func waitForCompletion(fileName string, isDir bool) {
 	var lastHash [16]byte
+	log.Println("waiting for file completion...")
 	for {
 		var currentHash [16]byte
 		if isDir {
@@ -243,6 +244,7 @@ func waitForCompletion(fileName string, isDir bool) {
 		lastHash = currentHash
 		time.Sleep(100 * time.Millisecond)
 	}
+	log.Println("file completed.")
 }
 
 func hashFile(fileName string) ([16]byte, error) {

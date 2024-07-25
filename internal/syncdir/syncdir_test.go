@@ -110,6 +110,41 @@ func TestAwaitNextFileChange(t *testing.T) {
 			}},
 			Name: "Delete directory",
 		},
+		{
+			ScriptName: "copy_large_file.sh",
+			Exp: []FileChange{{
+				File:   "largefile",
+				IsDir:  false,
+				Change: FILE_MOD,
+			}},
+			Name: "Copy large file",
+		},
+		{
+			ScriptName: "copy_large_dir.sh",
+			Exp: []FileChange{
+				{
+					File:   "a/file_a",
+					IsDir:  false,
+					Change: FILE_MOD,
+				},
+				{
+					File:   "a/file_aa",
+					IsDir:  false,
+					Change: FILE_MOD,
+				},
+				{
+					File:   "a/b/file_b",
+					IsDir:  false,
+					Change: FILE_MOD,
+				},
+				{
+					File:   "a/b/file_bb",
+					IsDir:  false,
+					Change: FILE_MOD,
+				},
+			},
+			Name: "Copy large directory",
+		},
 	}
 
 	wd := util.Getwd()
@@ -138,6 +173,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 	envVars := map[string]string{
 		"SYNCDIR_WD":           wd,
 		"SYNCDIR_ROOT":         testdir,
+		"SYNCDIR_TEMP":         "test_temp",
 		"SYNCDIR_SUB":          "sub_directory",
 		"SYNCDIR_SUB_FILENAME": "anotherfile.txt",
 		"SYNCDIR_FILENAME":     "somefile.txt",
@@ -149,10 +185,15 @@ func TestAwaitNextFileChange(t *testing.T) {
 	}
 
 	// some setup
-	if err = exec.Command("bash", filepath.Join(wd, "setup_copy_dir.sh")).Run(); err != nil {
-		t.Error("error doing setup")
+	if err = exec.Command("bash", filepath.Join(wd, "test_scripts", "setup_copy_dir.sh")).Run(); err != nil {
+		t.Error("error running setup script")
 		return
 	}
+	if err = exec.Command("bash", filepath.Join(wd, "test_scripts", "setup_test_temp.sh")).Run(); err != nil {
+		t.Error("error running temp directory setup script")
+		return
+	}
+	defer os.RemoveAll(filepath.Join(wd, "test_temp"))
 
 	// start tracking file changes
 	RefreshFileIndex(testdir)
@@ -180,7 +221,7 @@ func TestAwaitNextFileChange(t *testing.T) {
 
 	for _, testCase := range testCases {
 		log.Printf("%s: Begin\n", testCase.Name)
-		if err = exec.Command("bash", filepath.Join(wd, testCase.ScriptName)).Run(); err != nil {
+		if err = exec.Command("bash", filepath.Join(wd, "test_scripts", testCase.ScriptName)).Run(); err != nil {
 			t.Error(testCase.Name+":", err)
 			return
 		}
